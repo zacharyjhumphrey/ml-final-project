@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import graphviz
 from sklearn.preprocessing import OneHotEncoder
+from matplotlib import cm
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
 
 """
     IMPORTANT NOTES: PaRappa The Rapper on line 4222 original had the rating K-A. 
@@ -83,10 +86,7 @@ df = pd.read_csv(
     engine="python",
 )
 
-
 def model_1(df):
-    # select a few important
-    # ["Name","Year_of_Release","Genre","Publisher","NA_Sales","EU_Sales","JP_Sales","Other_Sales","Global_Sales","Critic_Score","Critic_Count","User_Score","User_Count","Developer","Rating"]
     # FULL_LIST_OF_ATTRIBUTES = [
     #     "Name",
     #     "Year_of_Release",
@@ -104,7 +104,7 @@ def model_1(df):
     #     "Developer",
     #     "Rating",
     # ]
-    DATA_COLUMNS = ["User_Count", "User_Score", "Year_of_Release", "Critic_Count"]
+    DATA_COLUMNS = ["User_Count", "User_Score", "Year_of_Release", "Critic_Count", "Critic_Score"]
     TARGET_COLUMN = "Global_Sales"
     ALL_COLUMNS = DATA_COLUMNS.copy()
     ALL_COLUMNS.extend([TARGET_COLUMN])
@@ -137,12 +137,23 @@ def model_1(df):
     test_y, test_x = extract_target_column(test_ds, "Global_Sales")
 
     # create the decision tree
-    clf = tree.DecisionTreeClassifier(max_depth=4, max_leaf_nodes=20)
+    # HYPERPARAMETERS
+    # criterion{“gini”, “entropy”, “log_loss”}
+    # max_depth, int
+    # min_samples_split, int
+    # min_samples_leaf, int 
+    # max_features, int
+    # max_leaf_nodes, int
+    # min_impurity_decrease, float
+    # TODO Figure out how accurate the model is across sales bins
+    clf = tree.DecisionTreeClassifier(max_leaf_nodes=50)
     clf = clf.fit(train_x, train_y)
-    print(f"mean accuracy: {clf.score(test_x, test_y)}")
+    acc = clf.score(test_x, test_y)
+    print(f"mean accuracy: {acc.round(2)}")
 
     # plot the tree
     plt.figure(figsize=(150, 18))
+    plt.suptitle(f"Accuracy: {acc.round(4) * 100}%")
     tree.plot_tree(
         clf,
         fontsize=6,
@@ -154,68 +165,108 @@ def model_1(df):
     plt.savefig("model_1.png")
     # plt.show()
 
-
 def model_2(df):
-    # drop redundant sales numbers and some string attributes
-    df = df.drop(["NA_Sales", "EU_Sales", "JP_Sales", "Other_Sales"], axis=1)
-    df = df.drop(["Name", "Publisher", "Developer"], axis=1)
+    y = df["User_Count"]
+    x = df["Critic_Score"].to_numpy()
+
+    # split into training and test data
+    # find average variance?
+    # train_ds, test_ds = split_dataset(df)
+    poly = PolynomialFeatures(degree=1, include_bias=False)
+
+    poly_features = poly.fit_transform(x.reshape(-1, 1))
+    poly_reg_model = LinearRegression()
+    poly_reg_model.fit(poly_features, y)
+    y_predicted = poly_reg_model.predict(poly_features)
+
+    # plot the graph
+    plt.figure(figsize=(10, 6))
+    plt.title("Linear Regression", size=16)
+    plt.scatter(x, y)
+    plt.plot(x, y_predicted, c="red")
+    plt.savefig("model_2.png")
+    # plt.show()
+
+def model_3(df):
+    # FULL_LIST_OF_ATTRIBUTES = [
+    #     "Name",
+    #     "Year_of_Release",
+    #     "Genre",
+    #     "Publisher",
+    #     "NA_Sales",
+    #     "EU_Sales",
+    #     "JP_Sales",
+    #     "Other_Sales",
+    #     "Global_Sales",
+    #     "Critic_Score",
+    #     "Critic_Count",
+    #     "User_Score",
+    #     "User_Count",
+    #     "Developer",
+    #     "Rating",
+    # ]
+    DATA_COLUMNS = ["User_Count", "Year_of_Release", "Critic_Count", "Critic_Score"]
+    TARGET_COLUMN = "User_Score"
+    ALL_COLUMNS = DATA_COLUMNS.copy()
+    ALL_COLUMNS.extend([TARGET_COLUMN])
+    df = df[ALL_COLUMNS]
 
     # turning user scores and global sales into discrete, integer values
-    df["User_Score"] = df["User_Score"].apply(lambda x: int(x * 10))
-    df["Global_Sales"] = df["Global_Sales"].apply(lambda x: int(x * 100))
+    if "User_Score" in ALL_COLUMNS:
+        df["User_Score"] = df["User_Score"].apply(lambda x: int(x * 10))
 
-    # # turning ratings into a numerical representation
-    df["Rating"] = df["Rating"].apply(
-        lambda x: RATING_CONVERSION_DICT[x] if x in RATING_CONVERSION_DICT else -1
-    )
+    # df["Global_Sales"] = df["Global_Sales"].apply(lambda x: int(x * 100))
 
-    # one hot encode genre
-    ohe = OneHotEncoder()
-    transformed = ohe.fit_transform(df[["Genre"]])
-    df[ohe.categories_[0]] = transformed.toarray()
-    df = df.drop(["Genre"], axis=1)
+    # turning ratings into a numerical representation
+    if "Rating" in ALL_COLUMNS:
+        df["Rating"] = df["Rating"].apply(
+            lambda x: RATING_CONVERSION_DICT[x] if x in RATING_CONVERSION_DICT else -1
+        )
 
-    bins = [0, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 10000]
-    # TODO Make more intuitive labels for when I plot the graph
-    labels = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 10000]
+    bins = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    labels = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
     # bin the sales
-    df["Global_Sales"] = pd.cut(
-        x=df["Global_Sales"], bins=bins, labels=labels, include_lowest=True
+    df["User_Score"] = pd.cut(
+        x=df["User_Score"], bins=bins, labels=labels, include_lowest=True
     )
 
     # split into training and test data
     train_ds, test_ds = split_dataset(df)
 
-    train_y, train_x = extract_target_column(train_ds, "Global_Sales")
-    test_y, test_x = extract_target_column(test_ds, "Global_Sales")
-
-    feature_names = [
-        "Year_of_Release",
-        "Critic_Score",
-        "Critic_Count",
-        "User_Score",
-        "User_Count",
-        "Rating",
-    ].extend(
-        transformed.toarray()
-    )
+    train_y, train_x = extract_target_column(train_ds, "User_Score")
+    test_y, test_x = extract_target_column(test_ds, "User_Score")
 
     # create the decision tree
-    clf = tree.DecisionTreeClassifier(
-        max_depth=5,
-    )
+    # HYPERPARAMETERS
+    # criterion{“gini”, “entropy”, “log_loss”}
+    # max_depth, int
+    # min_samples_split, int
+    # min_samples_leaf, int 
+    # max_features, int
+    # max_leaf_nodes, int
+    # min_impurity_decrease, float
+    clf = tree.DecisionTreeClassifier(max_leaf_nodes=50)
     clf = clf.fit(train_x, train_y)
-    print(f"mean accuracy: {clf.score(test_x, test_y)}")
+    acc = clf.score(test_x, test_y)
+    print(f"mean accuracy: {acc.round(2)}")
 
     # plot the tree
-    plt.figure(figsize=(50, 18))
+    plt.figure(figsize=(150, 18))
+    plt.suptitle(f"Accuracy: {acc.round(4) * 100}%")
     tree.plot_tree(
-        clf, fontsize=6, feature_names=feature_names, max_depth=5
-    )  # class_names=[str(x) for x in labels], proportion=True
-    plt.savefig("model_2.png")
-    plt.show()
+        clf,
+        fontsize=6,
+        feature_names=DATA_COLUMNS,
+        filled=True,
+        class_names=[f"{x}" for x in labels],
+        max_depth=5,
+    )  # proportion=True
+    plt.savefig("model_3.png")
+    # plt.show()
 
 
-model_1(df)
+# model_1(df)
 # model_2(df)
+model_3(df)
+# plt.show()
