@@ -134,7 +134,7 @@ def model_1(df):
     train_ds, test_ds = split_dataset(df)
 
     train_y, train_x = extract_target_column(train_ds, "Global_Sales")
-    test_y, test_x = extract_target_column(test_ds, "Global_Sales")
+    # test_y, test_x = extract_target_column(test_ds, "Global_Sales")
 
     # create the decision tree
     # HYPERPARAMETERS
@@ -145,11 +145,17 @@ def model_1(df):
     # max_features, int
     # max_leaf_nodes, int
     # min_impurity_decrease, float
-    # TODO Figure out how accurate the model is across sales bins
     clf = tree.DecisionTreeClassifier(max_leaf_nodes=50)
     clf = clf.fit(train_x, train_y)
-    acc = clf.score(test_x, test_y)
-    print(f"mean accuracy: {acc.round(2)}")
+    for i in range(bins):
+        if i == 0 or i == len(bins) - 1:
+            continue
+        left_bound = bins[i-1]
+        right_bound = bins[i]
+        grouped = test_ds[(test_ds['Global_Sales'] < right_bound and test_ds['Global_Sales'] >= left_bound)]
+        grouped_y, grouped_x = extract_target_column(grouped, "Global_Sales")
+        acc = clf.score(grouped_x, grouped_y)
+        print(f"mean accuracy for {bins[i-1]} to {bins[i]}: {acc.round(2)}")
 
     # plot the tree
     plt.figure(figsize=(150, 18))
@@ -266,7 +272,7 @@ def model_3(df):
     # plt.show()
 
 
-# model_1(df)
+model_1(df)
 # model_2(df)
-model_3(df)
+# model_3(df)
 # plt.show()
